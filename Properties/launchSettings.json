@@ -1,0 +1,11 @@
+{
+  "profiles": {
+    "PrintFins": {
+      "commandName": "Project",
+      "applicationUrl": "http://127.0.0.1:8731;https://127.0.0.1:8732",
+      "environmentVariables": {
+        "ASPNETCORE_ENVIRONMENT": "Development"
+      }
+    }
+  }
+}

@@ -1,0 +1,42 @@
+{
+  // Git URL of the site to serve. The local clone is updated when this remote has a different commit.
+  "repositoryUrl": "https://github.com/gittrahan/support-fins.git",
+
+  // Folder that receives the clone. A relative path is resolved from the directory that contains this file.
+  // The commit id is the clone's own Git HEAD, not a value stored in this file.
+  // When that id matches the remote, the folder is left as it is and no update window is shown.
+  // When the remote has newer commits, the folder is updated and a window lists those commit titles.
+  "cloneDirectory": "support-fins",
+
+  // Folder served over HTTP. The upstream dev server serves the repository's web directory.
+  // A relative path is resolved from cloneDirectory. An absolute path is used as-is.
+  "webRoot": "web",
+
+  // Address the web server binds to. 127.0.0.1 accepts connections from this computer only.
+  // 0.0.0.0 accepts connections from other devices on the local network.
+  "host": "127.0.0.1",
+
+  // TCP port for HTTP. The browser and the in-app window open this URL.
+  // The upstream dev server uses 8731.
+  "port": 8731,
+
+  // TCP port for HTTPS. The in-app window opens this URL. The system browser still opens HTTP.
+  "httpsPort": 8732,
+
+  // How the site is shown after the server starts.
+  // "browser" opens the computer's default browser.
+  // "webview" opens a maximized window inside this app.
+  "display": "webview",
+
+  // When true, a folder that was just downloaded is scanned before the site opens.
+  // The site stays closed when the scanner fails or reports a threat.
+  // A clone that is already up to date is not scanned again.
+  "scanDownloads": true,
+
+  // Command that scans the downloaded folder. {path} is replaced with that folder.
+  // Exit code 0 means the folder is clean. Any other exit code deletes the download and stops.
+  // Leave this empty to scan with Windows Defender.
+  // ESET example:
+  // "antivirusCommand": "\"C:\\Program Files\\ESET\\ESET Security\\ecls.exe\" --action=none \"{path}\""
+  "antivirusCommand": ""
+}
