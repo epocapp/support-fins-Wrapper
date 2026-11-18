@@ -29,8 +29,10 @@ static class AppWindow
     static CoreWebView2Controller? _controller;
     static Action? _closed;
     static bool _classRegistered;
+    static IntPtr _classNamePtr;
     static readonly WndProcThunk Thunk = WndProc;
     static readonly IntPtr ThunkPtr = Marshal.GetFunctionPointerForDelegate(Thunk);
+    const string WindowTitle = "support fins wrapper";
 
     public static void Run(string url, Action onClosed)
     {
@@ -38,7 +40,11 @@ static class AppWindow
         SetProcessDpiAwarenessContext(DpiAwarenessContextPerMonitorAwareV2);
 
         var instance = GetModuleHandle(null);
-        const string className = "PrintFinsWebViewHost";
+        // Trimmed single-file builds mangled CharSet string marshalling for some
+        // user32 entry points (title became the first character only). Pass UTF-16 pointers.
+        if (_classNamePtr == IntPtr.Zero)
+            _classNamePtr = Marshal.StringToHGlobalUni("PrintFinsWebViewHost");
+
         if (!_classRegistered)
         {
             var wc = new WndClassEx
@@ -50,28 +56,39 @@ static class AppWindow
                 hIcon = LoadIcon(IntPtr.Zero, (IntPtr)IdiApplication),
                 hCursor = LoadCursor(IntPtr.Zero, (IntPtr)IdcArrow),
                 hbrBackground = (IntPtr)(ColorWindow + 1),
-                lpszClassName = className,
+                lpszClassName = _classNamePtr,
             };
             if (RegisterClassEx(ref wc) == 0)
                 throw new InvalidOperationException($"RegisterClassEx failed ({Marshal.GetLastWin32Error()}).");
             _classRegistered = true;
         }
 
-        var hwnd = CreateWindowEx(
-            0,
-            className,
-            "Support Fins",
-            WsOverlappedWindow,
-            CwUseDefault,
-            CwUseDefault,
-            CwUseDefault,
-            CwUseDefault,
-            IntPtr.Zero,
-            IntPtr.Zero,
-            instance,
-            IntPtr.Zero);
-        if (hwnd == IntPtr.Zero)
-            throw new InvalidOperationException($"CreateWindowEx failed ({Marshal.GetLastWin32Error()}).");
+        var titlePtr = Marshal.StringToHGlobalUni(WindowTitle);
+        IntPtr hwnd;
+        try
+        {
+            hwnd = CreateWindowEx(
+                0,
+                _classNamePtr,
+                titlePtr,
+                WsOverlappedWindow,
+                CwUseDefault,
+                CwUseDefault,
+                CwUseDefault,
+                CwUseDefault,
+                IntPtr.Zero,
+                IntPtr.Zero,
+                instance,
+                IntPtr.Zero);
+            if (hwnd == IntPtr.Zero)
+                throw new InvalidOperationException($"CreateWindowEx failed ({Marshal.GetLastWin32Error()}).");
+
+            SetWindowText(hwnd, titlePtr);
+        }
+        finally
+        {
+            Marshal.FreeHGlobal(titlePtr);
+        }
 
         ShowWindow(hwnd, SwMaximize);
         UpdateWindow(hwnd);
@@ -194,6 +211,9 @@ static class AppWindow
                 : CoreWebView2ServerCertificateErrorAction.Cancel;
         };
         core.NavigationCompleted += (_, _) => Program.KillConsoles();
+        // Keep our host title; the page document title must not replace it.
+        core.DocumentTitleChanged += (_, _) => ApplyWindowTitle(hwnd);
+        ApplyWindowTitle(hwnd);
 
         core.Navigate(url);
     }
@@ -236,6 +256,13 @@ static class AppWindow
             return;
         GetClientRect(hwnd, out var rect);
         _controller.Bounds = new Rectangle(0, 0, rect.Right - rect.Left, rect.Bottom - rect.Top);
+    }
+
+    static void ApplyWindowTitle(IntPtr hwnd)
+    {
+        var titlePtr = Marshal.StringToHGlobalUni(WindowTitle);
+        try { SetWindowText(hwnd, titlePtr); }
+        finally { Marshal.FreeHGlobal(titlePtr); }
     }
 
     static IntPtr WndProc(IntPtr hwnd, uint msg, IntPtr wParam, IntPtr lParam)
@@ -350,7 +377,7 @@ static class AppWindow
 
     delegate IntPtr WndProcThunk(IntPtr hWnd, uint msg, IntPtr wParam, IntPtr lParam);
 
-    [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
+    [StructLayout(LayoutKind.Sequential)]
     struct WndClassEx
     {
         public uint cbSize;
@@ -362,8 +389,8 @@ static class AppWindow
         public IntPtr hIcon;
         public IntPtr hCursor;
         public IntPtr hbrBackground;
-        public string? lpszMenuName;
-        public string lpszClassName;
+        public IntPtr lpszMenuName;
+        public IntPtr lpszClassName;
         public IntPtr hIconSm;
     }
 
@@ -388,14 +415,14 @@ static class AppWindow
         public int Bottom;
     }
 
-    [DllImport("user32.dll", SetLastError = true, CharSet = CharSet.Unicode)]
+    [DllImport("user32.dll", EntryPoint = "RegisterClassExW", SetLastError = true)]
     static extern ushort RegisterClassEx(ref WndClassEx lpwcx);
 
-    [DllImport("user32.dll", SetLastError = true, CharSet = CharSet.Unicode)]
+    [DllImport("user32.dll", EntryPoint = "CreateWindowExW", SetLastError = true)]
     static extern IntPtr CreateWindowEx(
         int dwExStyle,
-        string lpClassName,
-        string lpWindowName,
+        IntPtr lpClassName,
+        IntPtr lpWindowName,
         int dwStyle,
         int x,
         int y,
@@ -405,6 +432,9 @@ static class AppWindow
         IntPtr hMenu,
         IntPtr hInstance,
         IntPtr lpParam);
+
+    [DllImport("user32.dll", EntryPoint = "SetWindowTextW", SetLastError = true)]
+    static extern bool SetWindowText(IntPtr hWnd, IntPtr lpString);
 
     [DllImport("user32.dll")]
     static extern bool ShowWindow(IntPtr hWnd, int nCmdShow);
@@ -418,34 +448,36 @@ static class AppWindow
     [DllImport("user32.dll")]
     static extern bool GetClientRect(IntPtr hWnd, out Rect lpRect);
 
-    [DllImport("user32.dll")]
+    [DllImport("user32.dll", EntryPoint = "PeekMessageW")]
     static extern bool PeekMessage(out MSG lpMsg, IntPtr hWnd, uint wMsgFilterMin, uint wMsgFilterMax, uint wRemoveMsg);
 
-    [DllImport("user32.dll")]
+    [DllImport("user32.dll", EntryPoint = "GetMessageW")]
     static extern int GetMessage(out MSG lpMsg, IntPtr hWnd, uint wMsgFilterMin, uint wMsgFilterMax);
 
     [DllImport("user32.dll")]
     static extern bool TranslateMessage(ref MSG lpMsg);
 
-    [DllImport("user32.dll")]
+    [DllImport("user32.dll", EntryPoint = "DispatchMessageW")]
     static extern IntPtr DispatchMessage(ref MSG lpMsg);
 
     [DllImport("user32.dll")]
     static extern void PostQuitMessage(int nExitCode);
 
-    [DllImport("user32.dll")]
+    [DllImport("user32.dll", EntryPoint = "PostMessageW")]
     static extern bool PostMessage(IntPtr hWnd, uint msg, IntPtr wParam, IntPtr lParam);
 
-    [DllImport("user32.dll")]
+    // Must be W: this is a Unicode window (RegisterClassExW / CreateWindowExW).
+    // DefWindowProcA treats WM_SETTEXT as ANSI and keeps only the first character.
+    [DllImport("user32.dll", EntryPoint = "DefWindowProcW")]
     static extern IntPtr DefWindowProc(IntPtr hWnd, uint uMsg, IntPtr wParam, IntPtr lParam);
 
-    [DllImport("user32.dll")]
+    [DllImport("user32.dll", EntryPoint = "LoadCursorW")]
     static extern IntPtr LoadCursor(IntPtr hInstance, IntPtr lpCursorName);
 
-    [DllImport("user32.dll")]
+    [DllImport("user32.dll", EntryPoint = "LoadIconW")]
     static extern IntPtr LoadIcon(IntPtr hInstance, IntPtr lpIconName);
 
-    [DllImport("kernel32.dll", CharSet = CharSet.Unicode)]
+    [DllImport("kernel32.dll", EntryPoint = "GetModuleHandleW", CharSet = CharSet.Unicode)]
     static extern IntPtr GetModuleHandle(string? lpModuleName);
 
     [DllImport("user32.dll")]

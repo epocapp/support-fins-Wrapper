@@ -1,16 +1,20 @@
-# PrintFins
-
-**Version 1.0**
+# Support Fins wrapper
 
 Windows host for [Support Fins](https://github.com/gittrahan/support-fins): a C# executable that keeps a local copy of that repository up to date, serves its `web/` folder, and opens the site in a browser or an in-app WebView.
 
-There is no Python. The original project's `dev-server.py` is replaced by this app.
+## Where Support Fins comes from
+
+Support Fins is a separate project. It is a free, MIT-licensed web app by **Matthew Trahan** ([gittrahan](https://github.com/gittrahan)), published at [github.com/gittrahan/support-fins](https://github.com/gittrahan/support-fins) and live at [printfins.com](https://printfins.com). Copyright (c) 2026 gittrahan.
+
+Kudos to Trahan for the excellent app, please consider supporting him.	
+
+This app is just a wrapper that runs Support Fins locally. On startup it clones Trahan's repository (or updates the local clone), serves the `web/` folder, and opens it in a browser or an in-app WebView. This executable takes the place of upstream's Python `dev-server.py`.
 
 ## What happens with the original repo
 
-On every start, PrintFins talks to the Git remote in `repositoryUrl` (by default `https://github.com/gittrahan/support-fins.git`):
+On every start, thi app talks to the Git (`https://github.com/gittrahan/support-fins.git`):
 
-1. If `cloneDirectory` does not exist, it clones the repository (`git clone --depth 1`).
+1. If `cloneDirectory` does not exist, it clones the repository.
 2. If it already exists, it compares the local `HEAD` commit with the remote `HEAD`.
    - Same commit: nothing is downloaded.
    - Different commit: it fetches the update, resets the local clone to that commit, and shows a window listing the new commit titles (one per line).
@@ -28,7 +32,6 @@ In **webview** mode, the in-app window may only reach loopback (`localhost` / `1
 - [Git](https://git-scm.com/) on `PATH`
 - [.NET 8 SDK](https://dotnet.microsoft.com/download) to build
 - Microsoft Edge WebView2 Runtime for `display: "webview"` (included on current Windows 10/11)
-- For HTTPS: ASP.NET Core development certificate trusted once with `dotnet dev-certs https --trust`
 - **Framework-dependent publish only:** [.NET 8 Desktop Runtime](https://dotnet.microsoft.com/download/dotnet/8.0) and [ASP.NET Core 8 Runtime](https://dotnet.microsoft.com/download/dotnet/8.0) (x64) on the machine that runs the app
 
 ## Build and publish
