@@ -4,6 +4,13 @@ using System.Text.Json.Serialization;
 
 namespace PrintFins;
 
+[JsonSourceGenerationOptions(
+    PropertyNameCaseInsensitive = true,
+    ReadCommentHandling = JsonCommentHandling.Skip,
+    AllowTrailingCommas = true)]
+[JsonSerializable(typeof(AppSettings))]
+partial class AppSettingsJsonContext : JsonSerializerContext;
+
 sealed class AppSettings
 {
     public string RepositoryUrl { get; set; } = "";
@@ -34,20 +41,13 @@ sealed class AppSettings
         Path.GetDirectoryName(Environment.ProcessPath)
         ?? AppContext.BaseDirectory;
 
-    static JsonSerializerOptions SerializerOptions { get; } = new()
-    {
-        PropertyNameCaseInsensitive = true,
-        ReadCommentHandling = JsonCommentHandling.Skip,
-        AllowTrailingCommas = true,
-    };
-
     public static AppSettings Load()
     {
         var appDirectory = ApplicationDirectory;
         AppSettings settings;
         try
         {
-            settings = JsonSerializer.Deserialize<AppSettings>(ReadEmbeddedDefaults(), SerializerOptions)
+            settings = JsonSerializer.Deserialize(ReadEmbeddedDefaults(), AppSettingsJsonContext.Default.AppSettings)
                 ?? throw new InvalidDataException("Embedded settings.json is empty.");
         }
         catch (JsonException ex)

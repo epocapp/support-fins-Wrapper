@@ -4,7 +4,6 @@
     <TargetFramework>net8.0-windows</TargetFramework>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
-    <UseWindowsForms>true</UseWindowsForms>
     <RootNamespace>PrintFins</RootNamespace>
     <AssemblyName>PrintFins</AssemblyName>
     <OutputType>WinExe</OutputType>
@@ -24,7 +23,11 @@
     <EnableCompressionInSingleFile Condition="'$(SelfContained)' == 'true'">true</EnableCompressionInSingleFile>
     <DebugType>none</DebugType>
     <DebugSymbols>false</DebugSymbols>
-    <PublishTrimmed>false</PublishTrimmed>
+    <PublishTrimmed Condition="'$(SelfContained)' == 'true'">true</PublishTrimmed>
+    <!-- WebView2 is not trim-compatible; partial keeps those assemblies intact. -->
+    <TrimMode Condition="'$(PublishTrimmed)' == 'true'">partial</TrimMode>
+    <!-- WebView2 uses COM; trimming disables built-in COM unless this is set. -->
+    <BuiltInComInteropSupport Condition="'$(PublishTrimmed)' == 'true'">true</BuiltInComInteropSupport>
   </PropertyGroup>
 
   <ItemGroup>
@@ -32,9 +35,15 @@
     <PackageReference Include="Microsoft.Web.WebView2" Version="1.0.2903.40" />
   </ItemGroup>
 
-  <Target Name="ExcludeWebView2Wpf" BeforeTargets="ResolveAssemblyReferences">
+  <ItemGroup Condition="'$(PublishTrimmed)' == 'true'">
+    <!-- WebView2 relies on COM activation that trimming cannot see. -->
+    <TrimmerRootAssembly Include="Microsoft.Web.WebView2.Core" />
+  </ItemGroup>
+
+  <Target Name="ExcludeWebView2UiAssemblies" BeforeTargets="ResolveAssemblyReferences">
     <ItemGroup>
       <Reference Remove="@(Reference)" Condition="$([System.String]::Copy('%(Identity)').Contains('WebView2.Wpf'))" />
+      <Reference Remove="@(Reference)" Condition="$([System.String]::Copy('%(Identity)').Contains('WebView2.WinForms'))" />
     </ItemGroup>
   </Target>
 

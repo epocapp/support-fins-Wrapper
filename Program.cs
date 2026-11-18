@@ -185,42 +185,28 @@ static class Program
     {
         try
         {
-            EnsureWinForms();
-            MessageBox.Show(
-                ex.Message,
-                "PrintFins",
-                MessageBoxButtons.OK,
-                MessageBoxIcon.Error);
+            var detail = ex.ToString();
+            if (string.IsNullOrWhiteSpace(detail))
+                detail = ex.GetType().FullName ?? "Unknown startup error.";
+            if (detail.Length > 2500)
+                detail = detail[..2500] + Environment.NewLine + "…";
+            NativeMessage.Error(detail);
         }
-        catch
-        {
-            // Dialog could not be shown.
-        }
+        catch { }
     }
 
     static int Run(AppSettings settings)
     {
-        if (settings.IsWebView)
-            EnsureWinForms();
-        StartupProgress.Open(settings.IsBrowser);
-        try
-        {
-            var updates = SyncRepository(settings);
+        var updates = SyncRepository(settings);
 
-            if (!Directory.Exists(settings.ResolvedWebRoot))
-                throw new InvalidDataException($"Web root was not found after clone: {settings.ResolvedWebRoot}");
+        if (!Directory.Exists(settings.ResolvedWebRoot))
+            throw new InvalidDataException($"Web root was not found after clone: {settings.ResolvedWebRoot}");
 
-            var app = BuildServer(settings);
-            if (settings.IsBrowser)
-                return RunBrowser(app, settings, SiteUrl(settings, https: false), updates);
+        var app = BuildServer(settings);
+        if (settings.IsBrowser)
+            return RunBrowser(app, settings, SiteUrl(settings, https: false), updates);
 
-            return RunWebView(app, settings, SiteUrl(settings, https: true), updates);
-        }
-        catch
-        {
-            StartupProgress.CloseForm();
-            throw;
-        }
+        return RunWebView(app, settings, SiteUrl(settings, https: true), updates);
     }
 
     static WebApplication BuildServer(AppSettings settings)
@@ -275,13 +261,7 @@ static class Program
 
     static int RunBrowser(WebApplication app, AppSettings settings, string siteUrl, List<string> updates)
     {
-        var starting = app.StartAsync();
-        while (!starting.IsCompleted)
-        {
-            Application.DoEvents();
-            Thread.Sleep(15);
-        }
-        starting.GetAwaiter().GetResult();
+        app.StartAsync().GetAwaiter().GetResult();
         FinishStartup(settings, siteUrl, updates, "Press Ctrl+C to stop.");
         OpenSystemBrowser(siteUrl);
         app.WaitForShutdownAsync().GetAwaiter().GetResult();
@@ -295,33 +275,15 @@ static class Program
         var started = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         app.Lifetime.ApplicationStarted.Register(() => started.TrySetResult());
         var serverTask = Task.Run(() => app.RunAsync());
-
-        while (!started.Task.IsCompleted && !serverTask.IsCompleted)
-        {
-            Application.DoEvents();
-            Thread.Sleep(15);
-        }
+        Task.WaitAny(started.Task, serverTask);
         if (serverTask.IsCompleted && !started.Task.IsCompleted)
         {
-            StartupProgress.CloseForm();
             serverTask.GetAwaiter().GetResult();
             return 1;
         }
 
         FinishStartup(settings, siteUrl, updates, "Opening a maximized window. Close it to stop.");
-
-        EnsureWinForms();
-
-        AppWindow? window = null;
-        app.Lifetime.ApplicationStopping.Register(() =>
-        {
-            if (window is { IsHandleCreated: true, IsDisposed: false })
-                window.BeginInvoke(window.Close);
-        });
-
-        window = new AppWindow(siteUrl);
-        window.FormClosed += (_, _) => app.Lifetime.StopApplication();
-        Application.Run(window);
+        AppWindow.Run(siteUrl, () => app.Lifetime.StopApplication());
 
         try
         {
@@ -338,65 +300,17 @@ static class Program
     static void FinishStartup(AppSettings settings, string siteUrl, List<string> updates, string lastLine)
     {
         PrintServing(settings, siteUrl);
-        StartupProgress.Line(lastLine);
-        StartupProgress.CloseForm();
+        Status.Line(lastLine);
         if (updates.Count > 0)
             ShowUpdates(updates);
     }
 
-    static bool _winFormsReady;
-
-    static void EnsureWinForms()
-    {
-        if (_winFormsReady)
-            return;
-        Application.SetHighDpiMode(HighDpiMode.PerMonitorV2);
-        Application.EnableVisualStyles();
-        Application.SetCompatibleTextRenderingDefault(false);
-        _winFormsReady = true;
-    }
-
     static void ShowUpdates(IReadOnlyList<string> titles)
     {
-        EnsureWinForms();
-        using var font = new Font("Segoe UI", 10f);
-        using var form = new Form
-        {
-            Text = "Support Fins updated",
-            StartPosition = FormStartPosition.CenterScreen,
-            Width = 640,
-            Height = 420,
-            MinimumSize = new Size(420, 240),
-            TopMost = true,
-        };
-        var close = new Button
-        {
-            Text = "OK",
-            DialogResult = DialogResult.OK,
-            Dock = DockStyle.Bottom,
-            Height = 36,
-        };
-        var list = new TextBox
-        {
-            Multiline = true,
-            ReadOnly = true,
-            WordWrap = false,
-            ScrollBars = ScrollBars.Both,
-            Dock = DockStyle.Fill,
-            Font = font,
-            Text = string.Join(Environment.NewLine, titles),
-            TabStop = false,
-        };
-        form.Controls.Add(close);
-        form.Controls.Add(list);
-        form.AcceptButton = close;
-        form.CancelButton = close;
-        form.Shown += (_, _) =>
-        {
-            list.SelectionStart = 0;
-            list.SelectionLength = 0;
-        };
-        form.ShowDialog();
+        var body = string.Join(Environment.NewLine, titles);
+        if (body.Length > 2000)
+            body = body[..2000] + Environment.NewLine + "…";
+        NativeMessage.Info("Support Fins updated", body);
     }
 
     static List<string> SyncRepository(AppSettings settings)
@@ -411,7 +325,7 @@ static class Program
             if (updates is not null)
                 return updates;
 
-            StartupProgress.Line($"Replacing {destination}");
+            Status.Line($"Replacing {destination}");
             DeleteDirectory(destination);
         }
 
@@ -419,7 +333,7 @@ static class Program
         if (!string.IsNullOrEmpty(parent))
             Directory.CreateDirectory(parent);
 
-        StartupProgress.Line($"Cloning {settings.RepositoryUrl}");
+        Status.Line($"Cloning {settings.RepositoryUrl}");
         var cloneExit = RunGit(null, "clone", "--depth", "1", settings.RepositoryUrl, destination);
         if (cloneExit != 0)
             throw new InvalidDataException($"git clone failed with exit code {cloneExit}.");
@@ -437,17 +351,17 @@ static class Program
 
         if (!SameRepository(origin.Output, settings.RepositoryUrl))
         {
-            StartupProgress.Line("Local clone is for a different repository. Replacing it.");
+            Status.Line("Local clone is for a different repository. Replacing it.");
             return null;
         }
 
-        StartupProgress.Line($"Local commit {localCommit}. Checking {settings.RepositoryUrl}");
+        Status.Line($"Local commit {localCommit}. Checking {settings.RepositoryUrl}");
         var remote = Git(null, "ls-remote", settings.RepositoryUrl, "HEAD");
         if (remote.ExitCode != 0)
         {
             if (!string.IsNullOrWhiteSpace(remote.Error))
-                StartupProgress.Line(remote.Error.TrimEnd());
-            StartupProgress.Line("Could not reach the remote. Using the local clone.");
+                Status.Line(remote.Error.TrimEnd());
+            Status.Line("Could not reach the remote. Using the local clone.");
             return [];
         }
 
@@ -457,11 +371,11 @@ static class Program
 
         if (string.Equals(localCommit, remoteCommit, StringComparison.OrdinalIgnoreCase))
         {
-            StartupProgress.Line($"Already up to date at {localCommit}. Skipping download.");
+            Status.Line($"Already up to date at {localCommit}. Skipping download.");
             return [];
         }
 
-        StartupProgress.Line($"Remote commit {remoteCommit} differs. Updating.");
+        Status.Line($"Remote commit {remoteCommit} differs. Updating.");
         var fetchExit = RunGit(destination, "fetch", "origin");
         if (fetchExit != 0)
             throw new InvalidDataException($"git fetch failed with exit code {fetchExit}.");
@@ -511,7 +425,7 @@ static class Program
             throw;
         }
 
-        StartupProgress.Line($"Scanning {directory} with {Path.GetFileName(fileName)}");
+        Status.Line($"Scanning {directory} with {Path.GetFileName(fileName)}");
 
         Process process;
         try
@@ -546,12 +460,10 @@ static class Program
             process.ErrorDataReceived += (_, e) => AppendScanLine(output, e.Data);
             process.BeginOutputReadLine();
             process.BeginErrorReadLine();
-            while (!process.WaitForExit(50))
-                Application.DoEvents();
             process.WaitForExit();
             if (process.ExitCode == 0)
             {
-                StartupProgress.Line("Scan finished with no threats.");
+                Status.Line("Scan finished with no threats.");
                 return;
             }
 
@@ -568,7 +480,7 @@ static class Program
     {
         if (line is null)
             return;
-        StartupProgress.Line(line);
+        Status.Line(line);
         output.AppendLine(line);
     }
 
@@ -721,8 +633,6 @@ static class Program
         process.ErrorDataReceived += (_, e) => AppendGitText(error, e.Data);
         process.BeginOutputReadLine();
         process.BeginErrorReadLine();
-        while (!process.WaitForExit(50))
-            Application.DoEvents();
         process.WaitForExit();
         return new GitResult(process.ExitCode, output.ToString(), error.ToString());
     }
@@ -732,7 +642,7 @@ static class Program
         if (line is null)
             return;
         buffer.AppendLine(line);
-        StartupProgress.Line(line);
+        Status.Line(line);
     }
 
     static Process StartGit(string? workingDirectory, params string[] args)
@@ -780,13 +690,13 @@ static class Program
 
     static void PrintServing(AppSettings settings, string siteUrl)
     {
-        StartupProgress.Line($"support-fins: {siteUrl} (serving {settings.ResolvedWebRoot})");
-        StartupProgress.Line($"Listening on HTTP {settings.Port} and HTTPS {settings.HttpsPort}. Opening {siteUrl}");
+        Status.Line($"support-fins: {siteUrl} (serving {settings.ResolvedWebRoot})");
+        Status.Line($"Listening on HTTP {settings.Port} and HTTPS {settings.HttpsPort}. Opening {siteUrl}");
         if (settings.Host is "0.0.0.0" or "::" or "+")
         {
             var ip = LanAddress();
             if (ip is not null)
-                StartupProgress.Line($"On other devices on your LAN, open http://{ip}:{settings.Port}/");
+                Status.Line($"On other devices on your LAN, open http://{ip}:{settings.Port}/");
         }
     }
 
