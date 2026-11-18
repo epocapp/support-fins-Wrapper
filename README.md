@@ -81,7 +81,7 @@ Comments (`//`) and trailing commas are allowed.
 | `httpsPort` | HTTPS listen port. WebView mode opens this URL. Must differ from `port`. |
 | `display` | `browser` opens the default browser (HTTP). `webview` opens a maximized in-app window (HTTPS, network-locked). |
 | `scanDownloads` | When `true`, scan a folder that was just downloaded before serving it. Up-to-date clones are not scanned again. |
-| `antivirusCommand` | Scanner command. `{path}` is replaced with the clone folder. Exit code `0` = clean; any other code deletes the download and stops. Default is empty = Windows Defender (`MpCmdRun`). |
+| `antivirusCommand` | Scanner command. `{path}` is replaced with the clone folder. Exit code `0` = clean; any other code deletes the download and stops. Default is empty = Windows Defender (`MpCmdRun`). If another antivirus is active (for example ESET), Defender scanning often fails; set this to that product's CLI, or set `scanDownloads` to `false`. |
 
 Example override next to the exe (only change display; everything else stays at the embedded defaults):
 

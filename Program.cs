@@ -467,13 +467,41 @@ static class Program
                 return;
             }
 
-            DeleteFailedDownload(directory);
             var detail = output.Length == 0
                 ? $"exit code {process.ExitCode}"
                 : output.ToString().Trim();
+            var usingDefenderDefault = string.IsNullOrWhiteSpace(settings.AntivirusCommand);
+            if (usingDefenderDefault && IsDefenderUnavailable(process.ExitCode, detail))
+            {
+                // Another product (ESET, etc.) often disables Defender's scan engine.
+                // That is not a threat finding — keep the download and continue.
+                var warning =
+                    "Windows Defender could not scan the download. Another antivirus is probably active, which often turns Defender scanning off."
+                    + Environment.NewLine
+                    + "The download was kept. Set antivirusCommand in settings.json to your antivirus CLI for an explicit scan, or set scanDownloads to false."
+                    + Environment.NewLine
+                    + detail;
+                Status.Line(warning);
+                NativeMessage.Info("PrintFins", warning);
+                return;
+            }
+
+            DeleteFailedDownload(directory);
             throw new InvalidDataException(
                 $"Antivirus scan failed ({process.ExitCode}). The download was deleted.{Environment.NewLine}{detail}");
         }
+    }
+
+    static bool IsDefenderUnavailable(int exitCode, string detail)
+    {
+        // MpCmdRun exit 2 + CmdTool/0x80004005 is the usual "engine not available" case
+        // when a third-party antivirus owns protection.
+        if (exitCode is not (1 or 2))
+            return false;
+
+        return detail.Contains("CmdTool: Failed", StringComparison.OrdinalIgnoreCase)
+            || detail.Contains("0x80004005", StringComparison.OrdinalIgnoreCase)
+            || detail.Contains("MpCmdRun.log", StringComparison.OrdinalIgnoreCase);
     }
 
     static void AppendScanLine(StringBuilder output, string? line)

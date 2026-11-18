@@ -35,7 +35,8 @@
 
   // Command that scans the downloaded folder. {path} is replaced with that folder.
   // Exit code 0 means the folder is clean. Any other exit code deletes the download and stops.
-  // Leave this empty to scan with Windows Defender.
+  // Leave this empty to scan with Windows Defender. If another antivirus is installed (ESET, etc.),
+  // Defender's scanner often fails; set this to that product's CLI, or set scanDownloads to false.
   // ESET example:
   // "antivirusCommand": "\"C:\\Program Files\\ESET\\ESET Security\\ecls.exe\" --action=none \"{path}\""
   "antivirusCommand": ""
