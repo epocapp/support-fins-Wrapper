@@ -29,18 +29,37 @@ In **webview** mode, the in-app window may only reach loopback (`localhost` / `1
 - [.NET 8 SDK](https://dotnet.microsoft.com/download) to build
 - Microsoft Edge WebView2 Runtime for `display: "webview"` (included on current Windows 10/11)
 - For HTTPS: ASP.NET Core development certificate trusted once with `dotnet dev-certs https --trust`
+- **Framework-dependent publish only:** [.NET 8 Desktop Runtime](https://dotnet.microsoft.com/download/dotnet/8.0) and [ASP.NET Core 8 Runtime](https://dotnet.microsoft.com/download/dotnet/8.0) (x64) on the machine that runs the app
 
 ## Build and publish
 
+Two folder publish profiles live under `Properties\PublishProfiles\`. Both target `win-x64`, Release, and a single-file exe. Default settings are embedded in the exe; the Support Fins repo is still downloaded at runtime.
+
+### Self-contained
+
+Profile: `self-contained` (`Properties\PublishProfiles\self-contained.pubxml`)
+
+Includes the .NET runtime in the exe (trimmed, compressed). No .NET install needed on the target PC.
+
 ```bash
-dotnet publish PrintFins.sln -c Release
+dotnet publish PrintFins.csproj -p:PublishProfile=self-contained
 ```
 
-Output:
+Output: `bin\Release\net8.0-windows\win-x64\publish\selfcontained\PrintFins.exe`
 
-`bin\Release\net8.0-windows\win-x64\publish\PrintFins.exe`
+### Framework-dependent
 
-That file is self-contained. Default settings are embedded inside it. The Support Fins repo is still downloaded at runtime.
+Profile: `framework-dependant` (`Properties\PublishProfiles\framework-dependant.pubxml`)
+
+Smaller exe; the target PC must already have the .NET 8 Desktop and ASP.NET Core 8 runtimes (x64).
+
+```bash
+dotnet publish PrintFins.csproj -p:PublishProfile=framework-dependant
+```
+
+Output: `bin\Release\net8.0-windows\win-x64\publish\dependant\PrintFins.exe`
+
+In Visual Studio, use **Build → Publish** and pick the same profile names.
 
 ## Override settings
 
